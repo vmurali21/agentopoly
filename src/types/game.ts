@@ -112,7 +112,7 @@ export interface GameState {
 
 // Client to Server WebSocket Messages
 export type ClientMessage =
-  | { type: 'JOIN_LOBBY'; name: string; color: string; avatar: string }
+  | { type: 'JOIN_LOBBY'; playerId?: string; name: string; color: string; avatar: string }
   | { type: 'SELECT_COLOR'; color: string }
   | { type: 'TOGGLE_READY' }
   | { type: 'START_GAME' }

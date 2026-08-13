@@ -85,16 +85,27 @@ class MonopolyRoom {
     }
   }
 
-  handleClientMessage(msg: ClientMessage, senderId: string) {
+  handleClientMessage(msg: ClientMessage, senderWs: ExtWebSocket) {
+    let pId = senderWs.id;
+
     switch (msg.type) {
       case 'JOIN_LOBBY': {
-        if (!this.state.players[senderId]) {
+        if (msg.playerId) {
+          pId = msg.playerId;
+          if (senderWs.id !== pId) {
+            this.connections.delete(senderWs.id);
+            senderWs.id = pId;
+            this.connections.set(pId, senderWs);
+          }
+        }
+
+        if (!this.state.players[pId]) {
           const colorIndex = Object.keys(this.state.players).length % PLAYER_COLORS.length;
           const assignedColor = msg.color || PLAYER_COLORS[colorIndex];
           const isFirst = this.state.playerOrder.length === 0;
 
           const newPlayer: Player = {
-            id: senderId,
+            id: pId,
             name: msg.name || `Player ${this.state.playerOrder.length + 1}`,
             color: assignedColor,
             avatar: msg.avatar || 'User',
@@ -110,10 +121,10 @@ class MonopolyRoom {
             getOutOfJailFreeCards: 0,
           };
 
-          this.state.players[senderId] = newPlayer;
-          this.state.playerOrder.push(senderId);
+          this.state.players[pId] = newPlayer;
+          this.state.playerOrder.push(pId);
           if (isFirst) {
-            this.state.hostId = senderId;
+            this.state.hostId = pId;
           }
 
           this.addLog(`${newPlayer.name} joined room ${this.roomCode}`, 'info');
@@ -123,23 +134,23 @@ class MonopolyRoom {
       }
 
       case 'SELECT_COLOR': {
-        if (this.state.players[senderId]) {
-          this.state.players[senderId].color = msg.color;
+        if (this.state.players[pId]) {
+          this.state.players[pId].color = msg.color;
           this.broadcastState();
         }
         break;
       }
 
       case 'TOGGLE_READY': {
-        if (this.state.players[senderId]) {
-          this.state.players[senderId].isReady = !this.state.players[senderId].isReady;
+        if (this.state.players[pId]) {
+          this.state.players[pId].isReady = !this.state.players[pId].isReady;
           this.broadcastState();
         }
         break;
       }
 
       case 'START_GAME': {
-        if (this.state.hostId === senderId && this.state.gamePhase === 'LOBBY') {
+        if (this.state.hostId === pId && this.state.gamePhase === 'LOBBY') {
           if (this.state.playerOrder.length < 1) return;
 
           this.state.properties = {};
@@ -183,7 +194,7 @@ class MonopolyRoom {
 
       case 'ROLL_DICE': {
         const activePlayer = this.getActivePlayer();
-        if (!activePlayer || activePlayer.id !== senderId || this.state.gamePhase !== 'IN_GAME') return;
+        if (!activePlayer || activePlayer.id !== pId || this.state.gamePhase !== 'IN_GAME') return;
         if (activePlayer.hasRolledThisTurn) return;
 
         const die1 = Math.floor(Math.random() * 6) + 1;
@@ -256,7 +267,7 @@ class MonopolyRoom {
 
       case 'BUY_PROPERTY': {
         const activePlayer = this.getActivePlayer();
-        if (!activePlayer || activePlayer.id !== senderId) return;
+        if (!activePlayer || activePlayer.id !== pId) return;
         const tile = BOARD_TILES.find((t) => t.id === msg.tileId);
         const propState = this.state.properties[msg.tileId];
 
@@ -274,7 +285,7 @@ class MonopolyRoom {
 
       case 'PASS_PROPERTY': {
         const activePlayer = this.getActivePlayer();
-        if (!activePlayer || activePlayer.id !== senderId) return;
+        if (!activePlayer || activePlayer.id !== pId) return;
         this.addLog(`${activePlayer.name} decided not to buy the property.`, 'info');
         this.state.currentDecision = null;
         this.broadcastState();
@@ -283,7 +294,7 @@ class MonopolyRoom {
 
       case 'BUILD_HOUSE': {
         const activePlayer = this.getActivePlayer();
-        if (!activePlayer || activePlayer.id !== senderId) return;
+        if (!activePlayer || activePlayer.id !== pId) return;
         const prop = this.state.properties[msg.tileId];
         const tile = BOARD_TILES.find((t) => t.id === msg.tileId);
 
@@ -306,7 +317,7 @@ class MonopolyRoom {
 
       case 'SELL_HOUSE': {
         const activePlayer = this.getActivePlayer();
-        if (!activePlayer || activePlayer.id !== senderId) return;
+        if (!activePlayer || activePlayer.id !== pId) return;
         const prop = this.state.properties[msg.tileId];
         const tile = BOARD_TILES.find((t) => t.id === msg.tileId);
 
@@ -322,7 +333,7 @@ class MonopolyRoom {
 
       case 'MORTGAGE_PROPERTY': {
         const activePlayer = this.getActivePlayer();
-        if (!activePlayer || activePlayer.id !== senderId) return;
+        if (!activePlayer || activePlayer.id !== pId) return;
         const prop = this.state.properties[msg.tileId];
         const tile = BOARD_TILES.find((t) => t.id === msg.tileId);
 
@@ -337,7 +348,7 @@ class MonopolyRoom {
 
       case 'UNMORTGAGE_PROPERTY': {
         const activePlayer = this.getActivePlayer();
-        if (!activePlayer || activePlayer.id !== senderId) return;
+        if (!activePlayer || activePlayer.id !== pId) return;
         const prop = this.state.properties[msg.tileId];
         const tile = BOARD_TILES.find((t) => t.id === msg.tileId);
 
@@ -355,7 +366,7 @@ class MonopolyRoom {
 
       case 'PAY_JAIL_FINE': {
         const activePlayer = this.getActivePlayer();
-        if (!activePlayer || activePlayer.id !== senderId || !activePlayer.inJail) return;
+        if (!activePlayer || activePlayer.id !== pId || !activePlayer.inJail) return;
 
         if (activePlayer.cash >= 50) {
           activePlayer.cash -= 50;
@@ -369,7 +380,7 @@ class MonopolyRoom {
 
       case 'USE_JAIL_CARD': {
         const activePlayer = this.getActivePlayer();
-        if (!activePlayer || activePlayer.id !== senderId || !activePlayer.inJail) return;
+        if (!activePlayer || activePlayer.id !== pId || !activePlayer.inJail) return;
 
         if (activePlayer.getOutOfJailFreeCards > 0) {
           activePlayer.getOutOfJailFreeCards -= 1;
@@ -383,7 +394,7 @@ class MonopolyRoom {
 
       case 'END_TURN': {
         const activePlayer = this.getActivePlayer();
-        if (!activePlayer || activePlayer.id !== senderId) return;
+        if (!activePlayer || activePlayer.id !== pId) return;
 
         const isDouble = this.state.diceState?.isDouble && !activePlayer.inJail && activePlayer.doublesCount > 0;
         this.state.currentDecision = null;
@@ -401,7 +412,7 @@ class MonopolyRoom {
 
       case 'DECLARE_BANKRUPTCY': {
         const activePlayer = this.getActivePlayer();
-        if (!activePlayer || activePlayer.id !== senderId) return;
+        if (!activePlayer || activePlayer.id !== pId) return;
 
         activePlayer.bankrupt = true;
         this.addLog(`${activePlayer.name} declared bankruptcy!`, 'bankrupt');
@@ -648,7 +659,6 @@ class MonopolyRoom {
   }
 }
 
-// Server Room Manager
 const rooms: Map<string, MonopolyRoom> = new Map();
 
 function getOrCreateRoom(roomCode: string): MonopolyRoom {
@@ -659,7 +669,6 @@ function getOrCreateRoom(roomCode: string): MonopolyRoom {
   return rooms.get(code)!;
 }
 
-// Create HTTP & WebSocket Server
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ status: 'ok', service: 'Agentopoly Real-Time WebSocket Server' }));
@@ -686,7 +695,7 @@ wss.on('connection', (ws: WebSocket, req) => {
   extWs.on('message', (data) => {
     try {
       const msg: ClientMessage = JSON.parse(data.toString());
-      room.handleClientMessage(msg, extWs.id);
+      room.handleClientMessage(msg, extWs);
     } catch (e) {
       console.error('Failed to parse client message:', e);
     }
@@ -697,7 +706,6 @@ wss.on('connection', (ws: WebSocket, req) => {
   });
 });
 
-// Heartbeat ping interval
 setInterval(() => {
   wss.clients.forEach((ws) => {
     const extWs = ws as ExtWebSocket;

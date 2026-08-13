@@ -44,7 +44,6 @@ export const GameProvider: React.FC<{ roomCode: string; children: ReactNode }> =
     const ws = new WebSocket(wsUrl);
     setSocket(ws);
 
-    // Generate consistent local client ID
     let localId = localStorage.getItem('agentopoly_client_id');
     if (!localId) {
       localId = Math.random().toString(36).substring(2, 10);
@@ -60,6 +59,7 @@ export const GameProvider: React.FC<{ roomCode: string; children: ReactNode }> =
       ws.send(
         JSON.stringify({
           type: 'JOIN_LOBBY',
+          playerId: localId,
           name: savedName,
           color: savedColor,
           avatar: 'User',
