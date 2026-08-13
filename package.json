@@ -3,11 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"next dev\" \"tsx watch server.ts\"",
-    "dev:next": "next dev",
-    "dev:server": "tsx watch server.ts",
-    "start:server": "tsx server.ts",
+    "dev": "next dev",
     "partykit:dev": "partykit dev",
+    "partykit:deploy": "partykit deploy",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

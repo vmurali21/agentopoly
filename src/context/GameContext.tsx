@@ -1,11 +1,12 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import PartySocket from 'partysocket';
 import { GameState, ClientMessage, ServerMessage, Player } from '../types/game';
 
 interface GameContextType {
   gameState: GameState | null;
-  socket: WebSocket | null;
+  socket: PartySocket | null;
   isConnected: boolean;
   myPlayerId: string | null;
   myPlayer: Player | null;
@@ -20,7 +21,7 @@ interface GameContextType {
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
 export const GameProvider: React.FC<{ roomCode: string; children: ReactNode }> = ({ roomCode, children }) => {
-  const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [socket, setSocket] = useState<PartySocket | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
@@ -28,46 +29,33 @@ export const GameProvider: React.FC<{ roomCode: string; children: ReactNode }> =
   const [isPortfolioOpen, setIsPortfolioOpen] = useState(false);
 
   useEffect(() => {
-    const rawHost =
-      process.env.NEXT_PUBLIC_SERVER_HOST ||
-      process.env.NEXT_PUBLIC_PARTYKIT_HOST ||
-      'localhost:3001';
+    const partyHost = process.env.NEXT_PUBLIC_PARTYKIT_HOST || '127.0.0.1:1999';
 
-    let wsUrl = '';
-    if (rawHost.startsWith('ws://') || rawHost.startsWith('wss://')) {
-      wsUrl = `${rawHost}?room=${roomCode.toUpperCase()}`;
-    } else {
-      const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      wsUrl = `${protocol}//${rawHost}?room=${roomCode.toUpperCase()}`;
-    }
+    const ws = new PartySocket({
+      host: partyHost,
+      room: roomCode.toLowerCase(),
+    });
 
-    const ws = new WebSocket(wsUrl);
     setSocket(ws);
+    setMyPlayerId(ws.id);
 
-    let localId = localStorage.getItem('agentopoly_client_id');
-    if (!localId) {
-      localId = Math.random().toString(36).substring(2, 10);
-      localStorage.setItem('agentopoly_client_id', localId);
-    }
-    setMyPlayerId(localId);
-
-    ws.onopen = () => {
+    ws.addEventListener('open', () => {
       setIsConnected(true);
-      const savedName = localStorage.getItem('agentopoly_player_name') || `Player_${localId.substring(0, 4)}`;
+      const savedName = localStorage.getItem('agentopoly_player_name') || `Player_${ws.id.substring(0, 4)}`;
       const savedColor = localStorage.getItem('agentopoly_player_color') || '#3b82f6';
 
       ws.send(
         JSON.stringify({
           type: 'JOIN_LOBBY',
-          playerId: localId,
+          playerId: ws.id,
           name: savedName,
           color: savedColor,
           avatar: 'User',
         } as ClientMessage)
       );
-    };
+    });
 
-    ws.onmessage = (event) => {
+    ws.addEventListener('message', (event) => {
       try {
         const msg: ServerMessage = JSON.parse(event.data);
         if (msg.type === 'STATE_UPDATE') {
@@ -76,11 +64,11 @@ export const GameProvider: React.FC<{ roomCode: string; children: ReactNode }> =
       } catch (e) {
         console.error('Failed to parse server message:', e);
       }
-    };
+    });
 
-    ws.onclose = () => {
+    ws.addEventListener('close', () => {
       setIsConnected(false);
-    };
+    });
 
     return () => {
       ws.close();
@@ -89,11 +77,11 @@ export const GameProvider: React.FC<{ roomCode: string; children: ReactNode }> =
 
   const sendMessage = useCallback(
     (msg: ClientMessage) => {
-      if (socket && socket.readyState === WebSocket.OPEN) {
+      if (socket && isConnected) {
         socket.send(JSON.stringify(msg));
       }
     },
-    [socket]
+    [socket, isConnected]
   );
 
   const myPlayer = gameState && myPlayerId ? gameState.players[myPlayerId] || null : null;
