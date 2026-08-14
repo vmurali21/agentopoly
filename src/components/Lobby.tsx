@@ -28,12 +28,39 @@ export const Lobby: React.FC<{ roomCode: string }> = ({ roomCode }) => {
   const [copied, setCopied] = useState(false);
   const [playerName, setPlayerName] = useState(myPlayer?.name || '');
   const [selectedAvatar, setSelectedAvatar] = useState(myPlayer?.avatar || 'Robot');
+  const [showDiagnostic, setShowDiagnostic] = useState(false);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!gameState) {
+        setShowDiagnostic(true);
+      }
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [gameState]);
 
   if (!gameState) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-zinc-300">
-        <RefreshCw className="w-10 h-10 animate-spin text-amber-500 mb-4" />
-        <p className="text-lg font-medium">Connecting to PartyKit Room...</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-zinc-300 max-w-md mx-auto text-center p-6 bg-zinc-900/90 border border-zinc-800 rounded-3xl shadow-2xl space-y-3">
+        <RefreshCw className="w-10 h-10 animate-spin text-amber-500 mb-2" />
+        <p className="text-lg font-black text-white">Connecting to PartyKit Room ({roomCode})...</p>
+
+        {showDiagnostic && (
+          <div className="mt-4 p-4 bg-amber-950/30 border border-amber-800/40 rounded-2xl text-amber-200 text-xs space-y-3 animate-in fade-in">
+            <p className="leading-relaxed">
+              If testing locally, start both the web app & PartyKit server with a single command:
+            </p>
+            <div className="p-2.5 bg-zinc-950 rounded-xl border border-zinc-800 font-mono text-[11px] text-amber-400 text-center font-bold">
+              npm run dev
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black rounded-xl transition-colors shadow-lg"
+            >
+              RETRY CONNECTION
+            </button>
+          </div>
+        )}
       </div>
     );
   }
